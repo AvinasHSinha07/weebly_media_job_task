@@ -13,11 +13,12 @@ import { SidebarTree } from './explorer/SidebarTree';
 import { SidebarSearchResults } from './explorer/SidebarSearchResults';
 
 export function Sidebar() {
-  const { items, activeFolderId, setActiveFolderId, addItem, setEditingFileId, isSidebarOpen } = useFileSystem();
+  const { items, activeFolderId, setActiveFolderId, addItem, setEditingFileId, isSidebarOpen, moveItem } = useFileSystem();
   
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set(['1']));
   const [modalState, setModalState] = useState<{ isOpen: boolean; type: 'file' | 'folder' }>({ isOpen: false, type: 'folder' });
   const [searchQuery, setSearchQuery] = useState('');
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
 
   const recentFiles = useMemo(() => {
     return items.filter(i => i.type === 'file').sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 5);
@@ -43,6 +44,36 @@ export function Sidebar() {
 
   const handleCreate = (name: string) => {
     addItem(activeFolderId, name, modalState.type);
+  };
+
+  const handleDragStart = (e: React.DragEvent, id: string) => {
+    e.stopPropagation();
+    e.dataTransfer.setData('text/plain', id);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent, folderId: string | null) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverId !== folderId) {
+      setDragOverId(folderId);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverId(null);
+  };
+
+  const handleDropOnFolder = (e: React.DragEvent, targetFolderId: string | null) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverId(null);
+    const itemId = e.dataTransfer.getData('text/plain');
+    if (!itemId) return;
+    moveItem(itemId, targetFolderId);
   };
 
   return (
@@ -96,9 +127,13 @@ export function Sidebar() {
             <div 
               className={cn(
                 "flex items-center gap-2 py-1.5 px-2.5 mx-2 cursor-pointer transition-all duration-200 rounded-md font-medium text-sm mb-1",
-                activeFolderId === null ? "bg-brand-lightest text-brand-dark" : "text-gray-700 hover:bg-gray-100"
+                activeFolderId === null ? "bg-brand-lightest text-brand-dark" : "text-gray-700 hover:bg-gray-100",
+                dragOverId === null && "ring-2 ring-brand-light ring-inset" // wait, active drag state is dragOverId === null and we are dragging over root? Let's just use bg-brand-lightest
               )}
               onClick={() => setActiveFolderId(null)}
+              onDragOver={(e) => handleDragOver(e, null)}
+              onDragLeave={handleDragLeave}
+              onDrop={(e) => handleDropOnFolder(e, null)}
             >
               <Folder className={cn("w-4 h-4", activeFolderId === null ? "text-brand-dark fill-current" : "text-brand-medium")} />
               Root
@@ -108,7 +143,12 @@ export function Sidebar() {
                 parentId={null} 
                 depth={0} 
                 expandedFolders={expandedFolders} 
-                toggleFolder={toggleFolder} 
+                toggleFolder={toggleFolder}
+                dragOverId={dragOverId}
+                onDragStart={handleDragStart}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDropOnFolder}
               />
             </div>
           </>
